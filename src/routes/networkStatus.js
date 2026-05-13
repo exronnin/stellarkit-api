@@ -1,0 +1,44 @@
+const express = require("express");
+const router = express.Router();
+const { server, horizonUrl, NETWORK } = require("../config/stellar");
+const { success } = require("../utils/response");
+
+/**
+ * GET /network-status
+ * Returns current Stellar network info: latest ledger, base fee, network passphrase.
+ *
+ * @example
+ * GET /network-status
+ */
+router.get("/", async (req, res, next) => {
+  try {
+    const ledger = await server.ledgers().order("desc").limit(1).call();
+    const latest = ledger.records[0];
+
+    return success(res, {
+      network: NETWORK,
+      horizonUrl,
+      latestLedger: {
+        sequence: latest.sequence,
+        closedAt: latest.closed_at,
+        transactionCount: latest.successful_transaction_count,
+        operationCount: latest.operation_count,
+        totalCoins: latest.total_coins,
+        feePool: latest.fee_pool,
+      },
+      fees: {
+        baseFeeInStroops: latest.base_fee_in_stroops,
+        baseFeeInXLM: (latest.base_fee_in_stroops / 1e7).toFixed(7),
+        basereserveInStroops: latest.base_reserve_in_stroops,
+        baseReserveInXLM: (latest.base_reserve_in_stroops / 1e7).toFixed(7),
+      },
+      protocol: {
+        version: latest.protocol_version,
+      },
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+module.exports = router;
