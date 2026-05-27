@@ -3,6 +3,7 @@ const express = require("express");
 const helmet = require("helmet");
 const cors = require("cors");
 const morgan = require("morgan");
+const compression = require("compression");
 
 const { setupWebSocket } = require("./websocket");
 
@@ -22,6 +23,7 @@ const PORT = process.env.PORT || 3000;
 
 // ── Security & Parsing ──────────────────────────────────────────────────────
 app.use(helmet());
+app.use(compression({ threshold: 0 }));
 app.use(cors());
 app.use(contentTypeValidator);
 app.use(express.json());

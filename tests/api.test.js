@@ -277,7 +277,7 @@ describe("StellarKit API", () => {
     it("returns X-Cache: HIT on subsequent request within TTL", async () => {
       // First request - cache miss
       await request(app).get("/network-status");
-      
+
       // Second request - cache hit
       const res = await request(app).get("/network-status");
       expect(res.statusCode).toBe(200);
@@ -288,7 +288,7 @@ describe("StellarKit API", () => {
     it("bypasses cache with ?fresh=true and returns MISS", async () => {
       // First request - cache miss
       await request(app).get("/network-status");
-      
+
       // Second request with fresh=true - bypass cache
       const res = await request(app).get("/network-status?fresh=true");
       expect(res.statusCode).toBe(200);
@@ -308,7 +308,7 @@ describe("StellarKit API", () => {
     it("returns X-Cache: HIT on subsequent request within TTL", async () => {
       // First request - cache miss
       await request(app).get("/fee-estimate");
-      
+
       // Second request - cache hit
       const res = await request(app).get("/fee-estimate");
       expect(res.statusCode).toBe(200);
@@ -319,7 +319,7 @@ describe("StellarKit API", () => {
     it("returns X-Cache: HIT for same operations count", async () => {
       // First request with operations=3
       await request(app).get("/fee-estimate?operations=3");
-      
+
       // Second request with same operations=3
       const res = await request(app).get("/fee-estimate?operations=3");
       expect(res.statusCode).toBe(200);
@@ -330,7 +330,7 @@ describe("StellarKit API", () => {
     it("returns X-Cache: MISS for different operations count", async () => {
       // First request with operations=1
       await request(app).get("/fee-estimate?operations=1");
-      
+
       // Second request with operations=5 - different cache key
       const res = await request(app).get("/fee-estimate?operations=5");
       expect(res.statusCode).toBe(200);
@@ -341,12 +341,25 @@ describe("StellarKit API", () => {
     it("bypasses cache with ?fresh=true and returns MISS", async () => {
       // First request - cache miss
       await request(app).get("/fee-estimate");
-      
+
       // Second request with fresh=true - bypass cache
       const res = await request(app).get("/fee-estimate?fresh=true");
       expect(res.statusCode).toBe(200);
       expect(res.headers["x-cache"]).toBe("MISS");
       expect(res.body.success).toBe(true);
+    });
+  });
+
+  // ── Compression ────────────────────────────────────────────────────────────
+  describe("Response Compression", () => {
+    it("compresses responses when Accept-Encoding is gzip", async () => {
+      // We use the root endpoint because it's large enough to trigger default compression
+      const res = await request(app)
+        .get("/")
+        .set("Accept-Encoding", "gzip");
+
+      expect(res.statusCode).toBe(200);
+      expect(res.headers["content-encoding"]).toBe("gzip");
     });
   });
 });
