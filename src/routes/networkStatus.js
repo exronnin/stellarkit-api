@@ -2,6 +2,7 @@ const express = require("express");
 const router = express.Router();
 const { server, horizonUrl, NETWORK } = require("../config/stellar");
 const { success } = require("../utils/response");
+const { networkStatusCache } = require("../utils/cache");
 
 /**
  * GET /network-status
@@ -12,10 +13,23 @@ const { success } = require("../utils/response");
  */
 router.get("/", async (req, res, next) => {
   try {
+    const cacheKey = "network-status";
+    const fresh = req.query.fresh === "true";
+
+    // Check cache first (unless fresh=true)
+    if (!fresh) {
+      const cached = networkStatusCache.get(cacheKey);
+      if (cached) {
+        res.set("X-Cache", "HIT");
+        return success(res, cached);
+      }
+    }
+
+    // Cache miss or fresh=true - fetch from Horizon
     const ledger = await server.ledgers().order("desc").limit(1).call();
     const latest = ledger.records[0];
 
-    return success(res, {
+    const data = {
       network: NETWORK,
       horizonUrl,
       latestLedger: {
@@ -35,7 +49,13 @@ router.get("/", async (req, res, next) => {
       protocol: {
         version: latest.protocol_version,
       },
-    });
+    };
+
+    // Cache the response
+    networkStatusCache.set(cacheKey, data);
+
+    res.set("X-Cache", "MISS");
+    return success(res, data);
   } catch (err) {
     next(err);
   }

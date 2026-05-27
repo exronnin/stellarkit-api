@@ -1,7 +1,14 @@
 const request = require("supertest");
 const app = require("../src/index");
+const { networkStatusCache, feeEstimateCache } = require("../src/utils/cache");
 
 describe("StellarKit API", () => {
+  // Clear caches before each test
+  beforeEach(() => {
+    networkStatusCache.clear();
+    feeEstimateCache.clear();
+  });
+
   // ── Health ─────────────────────────────────────────────────────────────────
   describe("GET /health", () => {
     it("returns 200 with status ok", async () => {
@@ -74,30 +81,115 @@ describe("StellarKit API", () => {
   });
 
   describe("GET /account/:id/analytics", () => {
-  it("returns analytics for a valid account", async () => {
-    const res = await request(app).get(
-      "/account/GAAZI4TCR3TY5OJHCTJC2A4QSY6CJWJH5IAJTGKIN2ER7LBNVKOCCWN/analytics"
-    );
+    it("returns analytics for a valid account", async () => {
+      const res = await request(app).get(
+        "/account/GAAZI4TCR3TY5OJHCTJC2A4QSY6CJWJH5IAJTGKIN2ER7LBNVKOCCWN/analytics"
+      );
 
-    expect(res.statusCode).toBe(200);
-    expect(res.body.success).toBe(true);
+      expect(res.statusCode).toBe(200);
+      expect(res.body.success).toBe(true);
 
-    expect(res.body.data).toHaveProperty("totalSent");
-    expect(res.body.data).toHaveProperty("totalReceived");
-    expect(res.body.data).toHaveProperty("topAssets");
-    expect(res.body.data).toHaveProperty("avgTransactionsPerDay");
-    expect(res.body.data).toHaveProperty("firstSeen");
-    expect(res.body.data).toHaveProperty("lastSeen");
+      expect(res.body.data).toHaveProperty("totalSent");
+      expect(res.body.data).toHaveProperty("totalReceived");
+      expect(res.body.data).toHaveProperty("topAssets");
+      expect(res.body.data).toHaveProperty("avgTransactionsPerDay");
+      expect(res.body.data).toHaveProperty("firstSeen");
+      expect(res.body.data).toHaveProperty("lastSeen");
 
-    expect(res.body.data.topAssets).toBeInstanceOf(Array);
+      expect(res.body.data.topAssets).toBeInstanceOf(Array);
+    });
+
+    it("returns 400 for invalid account ID", async () => {
+      const res = await request(app).get("/account/INVALID_KEY/analytics");
+
+      expect(res.statusCode).toBe(400);
+      expect(res.body.success).toBe(false);
+      expect(res.body.error.type).toBe("ValidationError");
+    });
   });
 
-  it("returns 400 for invalid account ID", async () => {
-    const res = await request(app).get("/account/INVALID_KEY/analytics");
+  // ── Cache Tests ─────────────────────────────────────────────────────────────
+  describe("Cache - /network-status", () => {
+    it("returns X-Cache: MISS on first request", async () => {
+      const res = await request(app).get("/network-status");
+      expect(res.statusCode).toBe(200);
+      expect(res.headers["x-cache"]).toBe("MISS");
+      expect(res.body.success).toBe(true);
+    });
 
-    expect(res.statusCode).toBe(400);
-    expect(res.body.success).toBe(false);
-    expect(res.body.error.type).toBe("ValidationError");
+    it("returns X-Cache: HIT on subsequent request within TTL", async () => {
+      // First request - cache miss
+      await request(app).get("/network-status");
+      
+      // Second request - cache hit
+      const res = await request(app).get("/network-status");
+      expect(res.statusCode).toBe(200);
+      expect(res.headers["x-cache"]).toBe("HIT");
+      expect(res.body.success).toBe(true);
+    });
+
+    it("bypasses cache with ?fresh=true and returns MISS", async () => {
+      // First request - cache miss
+      await request(app).get("/network-status");
+      
+      // Second request with fresh=true - bypass cache
+      const res = await request(app).get("/network-status?fresh=true");
+      expect(res.statusCode).toBe(200);
+      expect(res.headers["x-cache"]).toBe("MISS");
+      expect(res.body.success).toBe(true);
+    });
   });
-});
+
+  describe("Cache - /fee-estimate", () => {
+    it("returns X-Cache: MISS on first request", async () => {
+      const res = await request(app).get("/fee-estimate");
+      expect(res.statusCode).toBe(200);
+      expect(res.headers["x-cache"]).toBe("MISS");
+      expect(res.body.success).toBe(true);
+    });
+
+    it("returns X-Cache: HIT on subsequent request within TTL", async () => {
+      // First request - cache miss
+      await request(app).get("/fee-estimate");
+      
+      // Second request - cache hit
+      const res = await request(app).get("/fee-estimate");
+      expect(res.statusCode).toBe(200);
+      expect(res.headers["x-cache"]).toBe("HIT");
+      expect(res.body.success).toBe(true);
+    });
+
+    it("returns X-Cache: HIT for same operations count", async () => {
+      // First request with operations=3
+      await request(app).get("/fee-estimate?operations=3");
+      
+      // Second request with same operations=3
+      const res = await request(app).get("/fee-estimate?operations=3");
+      expect(res.statusCode).toBe(200);
+      expect(res.headers["x-cache"]).toBe("HIT");
+      expect(res.body.success).toBe(true);
+    });
+
+    it("returns X-Cache: MISS for different operations count", async () => {
+      // First request with operations=1
+      await request(app).get("/fee-estimate?operations=1");
+      
+      // Second request with operations=5 - different cache key
+      const res = await request(app).get("/fee-estimate?operations=5");
+      expect(res.statusCode).toBe(200);
+      expect(res.headers["x-cache"]).toBe("MISS");
+      expect(res.body.success).toBe(true);
+    });
+
+    it("bypasses cache with ?fresh=true and returns MISS", async () => {
+      // First request - cache miss
+      await request(app).get("/fee-estimate");
+      
+      // Second request with fresh=true - bypass cache
+      const res = await request(app).get("/fee-estimate?fresh=true");
+      expect(res.statusCode).toBe(200);
+      expect(res.headers["x-cache"]).toBe("MISS");
+      expect(res.body.success).toBe(true);
+    });
+  });
 });
